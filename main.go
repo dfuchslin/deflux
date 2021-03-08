@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -10,6 +11,8 @@ import (
 	"time"
 
 	"github.com/fasmide/deflux/deconz"
+	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
+	"github.com/influxdata/influxdb-client-go/v2/api/write"
 	client "github.com/influxdata/influxdb1-client/v2"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -21,6 +24,7 @@ const YmlFileName = "deflux.yml"
 type Configuration struct {
 	Deconz           deconz.Config
 	Influxdb         client.HTTPConfig
+	Influxdb2        influxdb2ConfigProxy
 	InfluxdbDatabase string
 }
 
@@ -40,23 +44,26 @@ func main() {
 	log.Printf("Connected to deCONZ at %s", config.Deconz.Addr)
 
 	// initial influx batch
-	batch, err := client.NewBatchPoints(client.BatchPointsConfig{
-		Database:  config.InfluxdbDatabase,
-		Precision: "s",
-	})
+	// batch, err := client.NewBatchPoints(client.BatchPointsConfig{
+	// 	Database:  config.InfluxdbDatabase,
+	// 	Precision: "s",
+	// })
 
-	if err != nil {
-		panic(err)
-	}
+	// if err != nil {
+	// 	panic(err)
+	// }
 
 	//TODO: figure out how to create a timer that is stopped
 	timeout := time.NewTimer(1 * time.Second)
 	timeout.Stop()
 
-	influxdb, err := client.NewHTTPClient(config.Influxdb)
+	/*influxdb, err := client.NewHTTPClient(config.Influxdb)
 	if err != nil {
 		panic(err)
-	}
+	}*/
+	influxdbv2 := influxdb2.NewClient(config.Influxdb2.URL, config.Influxdb2.Token)
+	writeAPI := influxdbv2.WriteAPIBlocking(config.Influxdb2.Org, config.Influxdb2.Bucket)
+	var points []*write.Point
 
 	for {
 
@@ -68,33 +75,58 @@ func main() {
 				continue
 			}
 
-			pt, err := client.NewPoint(
+			// pt, err := client.NewPoint(
+			// 	fmt.Sprintf("deflux_%s", sensorEvent.Sensor.Type),
+			// 	tags,
+			// 	fields,
+			// 	time.Now(), // TODO: we should use the time associated with the event...
+			// )
+
+			// if err != nil {
+			// 	panic(err)
+			// }
+
+			// batch.AddPoint(pt)
+
+			point := influxdb2.NewPoint(
 				fmt.Sprintf("deflux_%s", sensorEvent.Sensor.Type),
 				tags,
 				fields,
 				time.Now(), // TODO: we should use the time associated with the event...
 			)
-
-			if err != nil {
-				panic(err)
+			writeErr := writeAPI.WritePoint(context.Background(), point)
+			if writeErr != nil {
+				panic(writeErr)
 			}
+			// points = append(points, point)
+			// log.Println("created point")
+			// fmt.Println("created point:", point)
 
-			batch.AddPoint(pt)
 			timeout.Reset(1 * time.Second)
 
 		case <-timeout.C:
 			// when timer fires: save batch points, initialize a new batch
-			err := influxdb.Write(batch)
-			if err != nil {
-				panic(err)
+			// err := influxdb.Write(batch)
+
+			// if err != nil {
+			// 	panic(err)
+			// }
+			if len(points) > 0 {
+				err := writeAPI.WritePoint(context.Background(), points...)
+				if err != nil {
+					panic(err)
+				}
+				log.Printf("Saved %d records to influxdb", len(points))
+			} else {
+				log.Println("No events to save in influx, skipping")
 			}
 
-			log.Printf("Saved %d records to influxdb", len(batch.Points()))
 			// influx batch point
-			batch, err = client.NewBatchPoints(client.BatchPointsConfig{
-				Database:  config.InfluxdbDatabase,
-				Precision: "s",
-			})
+			// batch, err = client.NewBatchPoints(client.BatchPointsConfig{
+			// 	Database:  config.InfluxdbDatabase,
+			// 	Precision: "s",
+			// })
+			points = make([]*write.Point, 0)
 		}
 	}
 }
@@ -173,6 +205,13 @@ type influxdbConfigProxy struct {
 	UserAgent string
 }
 
+type influxdb2ConfigProxy struct {
+	URL    string
+	Org    string
+	Token  string
+	Bucket string
+}
+
 func outputDefaultConfiguration() {
 
 	c := defaultConfiguration()
@@ -192,6 +231,7 @@ func outputDefaultConfiguration() {
 	yml, err := yaml.Marshal(struct {
 		Deconz           deconz.Config
 		Influxdb         influxdbConfigProxy
+		Influxdb2        influxdb2ConfigProxy
 		InfluxdbDatabase string
 	}{
 		Deconz: c.Deconz,
@@ -200,6 +240,12 @@ func outputDefaultConfiguration() {
 			Username:  c.Influxdb.Username,
 			Password:  c.Influxdb.Password,
 			UserAgent: c.Influxdb.UserAgent,
+		},
+		Influxdb2: influxdb2ConfigProxy{
+			URL:    c.Influxdb2.URL,
+			Org:    c.Influxdb2.Org,
+			Token:  c.Influxdb2.Token,
+			Bucket: c.Influxdb2.Bucket,
 		},
 		InfluxdbDatabase: c.InfluxdbDatabase,
 	})
@@ -224,6 +270,12 @@ func defaultConfiguration() *Configuration {
 			Username:  "change me",
 			Password:  "change me",
 			UserAgent: "Deflux",
+		},
+		Influxdb2: influxdb2ConfigProxy{
+			URL:    "http://127.0.0.1:8086/",
+			Org:    "change me",
+			Token:  "change me",
+			Bucket: "change me",
 		},
 		InfluxdbDatabase: "deconz",
 	}

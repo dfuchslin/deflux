@@ -11,7 +11,6 @@ import (
 
 	"github.com/fasmide/deflux/deconz"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
-	client "github.com/influxdata/influxdb1-client/v2"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -20,10 +19,8 @@ const YmlFileName = "deflux.yml"
 
 // Configuration holds data for Deconz and influxdb configuration
 type Configuration struct {
-	Deconz           deconz.Config
-	Influxdb         client.HTTPConfig
-	Influxdb2        influxdb2ConfigProxy
-	InfluxdbDatabase string
+	Deconz    deconz.Config
+	Influxdb2 influxdb2ConfigProxy
 }
 
 func main() {
@@ -41,12 +38,8 @@ func main() {
 
 	log.Printf("Connected to deCONZ at %s", config.Deconz.Addr)
 
-	//TODO: figure out how to create a timer that is stopped
-	timeout := time.NewTimer(1 * time.Second)
-	timeout.Stop()
-
 	influxdbv2 := influxdb2.NewClientWithOptions(config.Influxdb2.URL, config.Influxdb2.Token,
-		influxdb2.DefaultOptions().SetBatchSize(20))
+		influxdb2.DefaultOptions().SetBatchSize(config.Influxdb2.BatchSize))
 	writeAPI := influxdbv2.WriteAPI(config.Influxdb2.Org, config.Influxdb2.Bucket)
 
 	for {
@@ -65,8 +58,6 @@ func main() {
 				fields,
 				time.Now(), // TODO: we should use the time associated with the event...
 			))
-
-			timeout.Reset(1 * time.Second)
 
 		}
 	}
@@ -136,21 +127,15 @@ func readConfiguration() ([]byte, error) {
 	return data, nil
 }
 
-// influxdbConfigProxy proxies client.HTTPConfig into a yml capable
+// influxdbConfigProxy proxies the influxdbv2 config into a yml capable
 // struct, its only used for encoding to yml as the yml package
 // have no problem skipping the Proxy field when decoding
-type influxdbConfigProxy struct {
-	Addr      string
-	Username  string
-	Password  string
-	UserAgent string
-}
-
 type influxdb2ConfigProxy struct {
-	URL    string
-	Org    string
-	Token  string
-	Bucket string
+	URL       string
+	Org       string
+	Token     string
+	Bucket    string
+	BatchSize uint
 }
 
 func outputDefaultConfiguration() {
@@ -170,25 +155,17 @@ func outputDefaultConfiguration() {
 	// we need to use a proxy struct to encode yml as the influxdb client configuration struct
 	// includes a Proxy: func() field that the yml encoder cannot handle
 	yml, err := yaml.Marshal(struct {
-		Deconz           deconz.Config
-		Influxdb         influxdbConfigProxy
-		Influxdb2        influxdb2ConfigProxy
-		InfluxdbDatabase string
+		Deconz    deconz.Config
+		Influxdb2 influxdb2ConfigProxy
 	}{
 		Deconz: c.Deconz,
-		Influxdb: influxdbConfigProxy{
-			Addr:      c.Influxdb.Addr,
-			Username:  c.Influxdb.Username,
-			Password:  c.Influxdb.Password,
-			UserAgent: c.Influxdb.UserAgent,
-		},
 		Influxdb2: influxdb2ConfigProxy{
-			URL:    c.Influxdb2.URL,
-			Org:    c.Influxdb2.Org,
-			Token:  c.Influxdb2.Token,
-			Bucket: c.Influxdb2.Bucket,
+			URL:       c.Influxdb2.URL,
+			Org:       c.Influxdb2.Org,
+			Token:     c.Influxdb2.Token,
+			Bucket:    c.Influxdb2.Bucket,
+			BatchSize: c.Influxdb2.BatchSize,
 		},
-		InfluxdbDatabase: c.InfluxdbDatabase,
 	})
 	if err != nil {
 		log.Fatalf("unable to generate default configuration: %s", err)
@@ -206,19 +183,13 @@ func defaultConfiguration() *Configuration {
 			Addr:   "http://127.0.0.1:8080/",
 			APIKey: "change me",
 		},
-		Influxdb: client.HTTPConfig{
-			Addr:      "http://127.0.0.1:8086/",
-			Username:  "change me",
-			Password:  "change me",
-			UserAgent: "Deflux",
-		},
 		Influxdb2: influxdb2ConfigProxy{
-			URL:    "http://127.0.0.1:8086/",
-			Org:    "change me",
-			Token:  "change me",
-			Bucket: "change me",
+			URL:       "http://127.0.0.1:8086/",
+			Org:       "change me",
+			Token:     "change me",
+			Bucket:    "change me",
+			BatchSize: 20,
 		},
-		InfluxdbDatabase: "deconz",
 	}
 
 	// lets see if we are able to discover a gateway, and overwrite parts of the

@@ -2,10 +2,10 @@ package deconz
 
 import (
 	"errors"
-	"time"
 	"log"
+	"time"
 
-	"github.com/fasmide/deflux/deconz/event"
+	"github.com/dfuchslin/deflux/deconz/event"
 )
 
 // SensorLookup represents an interface for sensor lookup
@@ -22,20 +22,15 @@ type EventReader interface {
 
 // SensorEventReader reads events from an event.reader and returns SensorEvents
 type SensorEventReader struct {
-	lookup SensorLookup
-	reader EventReader
+	lookup  SensorLookup
+	reader  EventReader
 	running bool
 }
-
-
-
-
-
 
 // starts a thread reading events into the given channel
 // returns immediately
 func (r *SensorEventReader) Start(out chan *SensorEvent) error {
-	
+
 	if r.lookup == nil {
 		return errors.New("Cannot run without a SensorLookup from which to lookup sensors")
 	}
@@ -48,9 +43,9 @@ func (r *SensorEventReader) Start(out chan *SensorEvent) error {
 	}
 
 	r.running = true
-	
+
 	go func() {
-		REDIAL:
+	REDIAL:
 		for r.running {
 			// establish connection
 			for r.running {
@@ -67,7 +62,7 @@ func (r *SensorEventReader) Start(out chan *SensorEvent) error {
 			for r.running {
 				e, err := r.reader.ReadEvent()
 				if err != nil {
-					if eerr, ok := err.(event.EventError) ; ok && eerr.Recoverable() {
+					if eerr, ok := err.(event.EventError); ok && eerr.Recoverable() {
 						log.Printf("Dropping event due to error: %s", err)
 						continue
 					}
@@ -76,7 +71,7 @@ func (r *SensorEventReader) Start(out chan *SensorEvent) error {
 				// we only care about sensor events
 				if e.Resource != "sensors" {
 					log.Printf("Dropping non-sensor event type %s", e.Resource)
-					continue;
+					continue
 				}
 
 				sensor, err := r.lookup.LookupSensor(e.ID)
@@ -94,8 +89,6 @@ func (r *SensorEventReader) Start(out chan *SensorEvent) error {
 	}()
 	return nil
 }
-
-
 
 // Close closes the reader, closing the connection to deconz and terminating the goroutine
 func (r *SensorEventReader) StopReadEvents() {

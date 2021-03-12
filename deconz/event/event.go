@@ -17,6 +17,7 @@ type Event struct {
 	Resource string          `json:"r"`
 	ID       int             `json:"id,string"`
 	RawState json.RawMessage `json:"state"`
+	Config   json.RawMessage `json:"config"`
 	State    interface{}
 }
 
@@ -34,10 +35,20 @@ func (d *Decoder) Parse(b []byte) (*Event, error) {
 	}
 
 	// If there is no state, dont try to parse it
-	// TODO: figure out what to do with these
-	//       some of them seems to be battery updates
-	if e.Resource != "sensors" || len(e.RawState) == 0 {
+	if e.Resource != "sensors" {
 		e.State = &EmptyState{}
+		return &e, nil
+	}
+
+	// If there is no state but a config, there might be a BatteryStatus
+	if len(e.RawState) == 0 && len(e.Config) > 0 {
+		var s BatteryStatus
+		err = json.Unmarshal(e.Config, &s)
+		e.State = &s
+		if err != nil {
+			fmt.Printf("unable to unmarshal batterystatus: %s", err)
+			e.State = &EmptyState{}
+		}
 		return &e, nil
 	}
 
@@ -267,19 +278,19 @@ func (z *CLIPPresence) Fields() map[string]interface{} {
 // ZHALightLevel represents a LightLevel Sensor
 type ZHALightLevel struct {
 	State
-	Dark bool
-	Daylight bool
+	Dark       bool
+	Daylight   bool
 	LightLevel int32
-	Lux int16
+	Lux        int16
 }
 
 // Fields returns timeseries data for influxdb
 func (z *ZHALightLevel) Fields() map[string]interface{} {
 	return map[string]interface{}{
-		"daylight": z.Daylight,
-		"dark": z.Dark,
+		"daylight":   z.Daylight,
+		"dark":       z.Dark,
 		"lightlevel": z.LightLevel,
-		"lux": z.Lux,
+		"lux":        z.Lux,
 	}
 }
 
@@ -313,17 +324,30 @@ func (z *ZHAOpenClose) Fields() map[string]interface{} {
 type ZHACarbonMonoxide struct {
 	State
 	Carbonmonoxide bool
-	Lowbattery bool
-	Tampered bool
+	Lowbattery     bool
+	Tampered       bool
 }
 
 // Fields returns timeseries data for influxdb
 func (z *ZHACarbonMonoxide) Fields() map[string]interface{} {
 	return map[string]interface{}{
-		"CO": z.Carbonmonoxide,
+		"CO":         z.Carbonmonoxide,
 		"lowbattery": z.Lowbattery,
-		"tampered": z.Tampered,
-		}
+		"tampered":   z.Tampered,
+	}
+}
+
+// BatteryStatus represents the current battery status
+type BatteryStatus struct {
+	State
+	Battery int
+}
+
+// Fields returns timeseries data for influxdb
+func (z *BatteryStatus) Fields() map[string]interface{} {
+	return map[string]interface{}{
+		"battery": z.Battery,
+	}
 }
 
 // EmptyState is an empty struct used to indicate no state was parsed

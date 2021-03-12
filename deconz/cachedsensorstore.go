@@ -51,6 +51,16 @@ func (c *CachedSensorStore) LookupSensor(i int) (*Sensor, error) {
 		return &s, nil
 	}
 
+	// try repopulating cache once to see if any new sensors have arrived
+	// could be better logic here...
+	err = c.populateCache()
+	if err != nil {
+		return nil, fmt.Errorf("unable to populate sensors: %s", err)
+	}
+	if s, found := (*c.cache)[i]; found {
+		return &s, nil
+	}
+
 	return nil, errors.New("no such sensor")
 }
 

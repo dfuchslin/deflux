@@ -1,4 +1,4 @@
-module github.com/fasmide/deflux
+module github.com/dfuchslin/deflux
 
 go 1.16
 

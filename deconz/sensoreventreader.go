@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/fasmide/deflux/deconz/event"
+	"github.com/dfuchslin/deflux/deconz/event"
 )
 
 // SensorLookup represents an interface for sensor lookup

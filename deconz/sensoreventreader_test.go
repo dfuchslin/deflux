@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/dfuchslin/deflux/deconz/event"
+	"github.com/fasmide/deflux/deconz/event"
 )
 
 const smokeDetectorNoFireEventPayload = `{	"e": "changed",	"id": "5",	"r": "sensors",	"state": {	  "fire": false,	  "lastupdated": "2018-03-13T19:46:03",	  "lowbattery": false,	  "tampered": false	},	"t": "event"  }`
@@ -28,10 +28,10 @@ func (t testReader) ReadEvent() (*event.Event, error) {
 	return d.Parse([]byte(smokeDetectorNoFireEventPayload))
 }
 func (t testReader) Dial() error {
-	return nil;
+	return nil
 }
 func (t testReader) Close() error {
-	return nil;
+	return nil
 }
 func TestSensorEventReader(t *testing.T) {
 
